@@ -37,3 +37,7 @@ TEST_CSV = os.path.join(DATA_DIR, 'test.csv')
 CHECKPOINT_PATH = os.path.join(MODEL_DIR, f"{MODEL_NAME}_best.pt")
 RESULTS_DIR = os.path.join(BASE_DIR, 'results')
 os.makedirs(RESULTS_DIR, exist_ok=True)
+
+# TensorBoard settings
+TENSORBOARD_DIR = os.path.join(BASE_DIR, 'runs')
+os.makedirs(TENSORBOARD_DIR, exist_ok=True)

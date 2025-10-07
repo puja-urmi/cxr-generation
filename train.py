@@ -12,6 +12,8 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, roc_auc_score
+from torch.utils.tensorboard import SummaryWriter
+from torchvision.utils import make_grid
 
 import config
 from data import get_dataloaders
@@ -52,6 +54,12 @@ class Trainer:
         # Training state
         self.start_epoch = 0
         self.best_val_loss = float('inf')
+        
+        # Initialize TensorBoard writer
+        current_time = datetime.now().strftime("%Y%m%d-%H%M%S")
+        log_dir = os.path.join(config.TENSORBOARD_DIR, f"{config.MODEL_NAME}_{current_time}")
+        self.writer = SummaryWriter(log_dir=log_dir)
+        logger.info(f"TensorBoard logs will be saved to {log_dir}")
         
         # Resume from checkpoint if requested
         if resume and os.path.exists(config.CHECKPOINT_PATH):
@@ -122,6 +130,11 @@ class Trainer:
         epoch_acc = accuracy_score(all_labels, all_preds)
         epoch_time = time.time() - start_time
         
+        # Log metrics to TensorBoard
+        self.writer.add_scalar('Loss/train', epoch_loss, epoch)
+        self.writer.add_scalar('Accuracy/train', epoch_acc, epoch)
+        self.writer.add_scalar('Time/train', epoch_time, epoch)
+        
         logger.info(f'Epoch [{epoch+1}/{config.EPOCHS}], '
                    f'Train Loss: {epoch_loss:.4f}, '
                    f'Train Acc: {epoch_acc:.4f}, '
@@ -163,6 +176,18 @@ class Trainer:
         val_f1 = f1_score(all_labels, all_preds, average='binary')
         val_auc = roc_auc_score(all_labels, all_probs)
         
+        # Log metrics to TensorBoard
+        self.writer.add_scalar('Loss/validation', val_loss, epoch)
+        self.writer.add_scalar('Accuracy/validation', val_acc, epoch)
+        self.writer.add_scalar('Precision/validation', val_precision, epoch)
+        self.writer.add_scalar('Recall/validation', val_recall, epoch)
+        self.writer.add_scalar('F1/validation', val_f1, epoch)
+        self.writer.add_scalar('AUC/validation', val_auc, epoch)
+        
+        # Log example predictions with images
+        if epoch % 5 == 0:  # Log images every 5 epochs to avoid clutter
+            self._log_prediction_examples(epoch)
+        
         logger.info(f'Epoch [{epoch+1}/{config.EPOCHS}], '
                    f'Val Loss: {val_loss:.4f}, '
                    f'Val Acc: {val_acc:.4f}, '
@@ -181,6 +206,44 @@ class Trainer:
             logger.info(f'Saved new best model with val_loss: {val_loss:.4f}')
         
         return val_loss, val_acc, val_precision, val_recall, val_f1, val_auc
+    
+    def _log_prediction_examples(self, epoch):
+        """Log example predictions with images to TensorBoard"""
+        self.model.eval()
+        example_images = []
+        example_labels = []
+        example_preds = []
+        
+        # Get a batch of validation images
+        for batch in self.val_loader:
+            images = batch['image'].to(self.device)
+            labels = batch['label'].to(self.device)
+            
+            with torch.no_grad():
+                outputs = self.model(images)
+                _, preds = torch.max(outputs, 1)
+            
+            # Convert back to CPU and numpy for logging
+            images_cpu = images.cpu()
+            labels_cpu = labels.cpu().numpy()
+            preds_cpu = preds.cpu().numpy()
+            
+            # Only take the first 8 examples to avoid cluttering TensorBoard
+            example_images = images_cpu[:8]
+            example_labels = labels_cpu[:8]
+            example_preds = preds_cpu[:8]
+            break
+        
+        # Create a grid of images with labels
+        img_grid = make_grid(example_images, nrow=4, normalize=True)
+        
+        # Add prediction labels
+        pred_labels = [f"True: {config.CLASSES[l]}, Pred: {config.CLASSES[p]}" 
+                       for l, p in zip(example_labels, example_preds)]
+        
+        # Log to TensorBoard
+        self.writer.add_image('Predictions', img_grid, global_step=epoch)
+        self.writer.add_text('Prediction Labels', str(pred_labels), global_step=epoch)
     
     def _save_checkpoint(self, epoch, val_loss):
         """Save model checkpoint"""
@@ -242,7 +305,22 @@ class Trainer:
                     logger.info(f"Early stopping after {epoch+1} epochs")
                     break
         
+        # Log model graph to TensorBoard
+        try:
+            # Get a sample batch for model graph
+            sample_batch = next(iter(self.train_loader))
+            sample_images = sample_batch['image'].to(self.device)
+            self.writer.add_graph(self.model, sample_images)
+        except Exception as e:
+            logger.warning(f"Failed to log model graph: {e}")
+        
+        # Close the TensorBoard writer
+        self.writer.close()
+        
         logger.info("Training completed")
+        logger.info(f"TensorBoard logs saved to {self.writer.log_dir}")
+        logger.info("To view training visualizations, run: tensorboard --logdir=runs")
+        
         return history
 
 

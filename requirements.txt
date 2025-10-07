@@ -14,6 +14,10 @@ tqdm>=4.50.0
 
 # Data handling
 kagglehub>=0.1.0
+kaggle>=1.5.12
+
+# Visualization and monitoring
+tensorboard>=2.8.0
 
 # Optional - for CUDA support
 # torch>=1.8.0+cu111
