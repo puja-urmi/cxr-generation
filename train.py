@@ -79,7 +79,9 @@ class Trainer:
         class_counts = np.zeros(config.NUM_CLASSES)
         
         for batch in self.train_loader:
-            labels = batch['label'].cpu().numpy()
+            # DataLoader returns (images, labels) tuple
+            images, labels = batch
+            labels = labels.cpu().numpy()
             for label in range(config.NUM_CLASSES):
                 class_counts[label] += np.sum(labels == label)
         
@@ -110,8 +112,9 @@ class Trainer:
         
         start_time = time.time()
         for i, batch in enumerate(self.train_loader):
-            images = batch['image'].to(self.device)
-            labels = batch['label'].to(self.device)
+            images, labels = batch
+            images = images.to(self.device)
+            labels = labels.to(self.device)
             
             # Forward pass
             self.optimizer.zero_grad()
@@ -160,8 +163,9 @@ class Trainer:
         
         with torch.no_grad():
             for batch in self.val_loader:
-                images = batch['image'].to(self.device)
-                labels = batch['label'].to(self.device)
+                images, labels = batch
+                images = images.to(self.device)
+                labels = labels.to(self.device)
                 
                 outputs = self.model(images)
                 loss = self.criterion(outputs, labels)
@@ -224,8 +228,9 @@ class Trainer:
         
         # Get a batch of validation images
         for batch in self.val_loader:
-            images = batch['image'].to(self.device)
-            labels = batch['label'].to(self.device)
+            images, labels = batch
+            images = images.to(self.device)
+            labels = labels.to(self.device)
             
             with torch.no_grad():
                 outputs = self.model(images)
@@ -317,7 +322,8 @@ class Trainer:
         try:
             # Get a sample batch for model graph
             sample_batch = next(iter(self.train_loader))
-            sample_images = sample_batch['image'].to(self.device)
+            sample_images, _ = sample_batch
+            sample_images = sample_images.to(self.device)
             self.writer.add_graph(self.model, sample_images)
         except Exception as e:
             logger.warning(f"Failed to log model graph: {e}")
