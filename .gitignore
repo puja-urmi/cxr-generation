@@ -1,5 +1,5 @@
-normal/logs_*.log
-normal/__pycache__/*
-normal/runs/*
-normal/results/*
-normal/models/*
+classifier/logs_*.log
+classifier/__pycache__/*
+classifier/runs/*
+classifier/results/*
+classifier/models/*
