@@ -18,22 +18,17 @@ BATCH_SIZE = 32
 LEARNING_RATE = 0.0001
 EPOCHS = 20
 EARLY_STOPPING_PATIENCE = 5
-NUM_WORKERS = 4  # For data loading
+NUM_WORKERS = 4  
 
 # Model settings
-MODEL_NAME = "xray_binary_classifier"
+MODEL_NAME = "densenet_classifier"
 MODEL_DIR = os.path.join(BASE_DIR, 'models')
 CLASSES = ['normal', 'abnormal']
 NUM_CLASSES = len(CLASSES)
 
-# Create directories if they don't exist
-os.makedirs(DATA_DIR, exist_ok=True)
 os.makedirs(MODEL_DIR, exist_ok=True)
 
-# Paths for saving/loading
-TRAIN_CSV = os.path.join(DATA_DIR, 'train.csv')
-VAL_CSV = os.path.join(DATA_DIR, 'val.csv')
-TEST_CSV = os.path.join(DATA_DIR, 'test.csv')
+# Paths for saving/loading models
 CHECKPOINT_PATH = os.path.join(MODEL_DIR, f"{MODEL_NAME}_best.pt")
 RESULTS_DIR = os.path.join(BASE_DIR, 'results')
 os.makedirs(RESULTS_DIR, exist_ok=True)

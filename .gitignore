@@ -1,2 +1,5 @@
 logs_*.log
 __pycache__/*
+runs/*
+results/*
+models/*
