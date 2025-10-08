@@ -57,7 +57,7 @@ class Trainer:
         class_weights = self._compute_class_weights()
         self.criterion = nn.CrossEntropyLoss(weight=class_weights)
         self.optimizer = optim.Adam(self.model.parameters(), lr=config.LEARNING_RATE)
-        self.scheduler = ReduceLROnPlateau(self.optimizer, mode='min', factor=0.5, patience=3, verbose=True)
+        self.scheduler = ReduceLROnPlateau(self.optimizer, mode='min', factor=0.5, patience=3)
         
         # Training state
         self.start_epoch = 0
