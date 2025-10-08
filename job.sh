@@ -11,6 +11,6 @@
 module load python/3.11
 module load gcc opencv
 source /home/psaha03/scratch/env/bin/activate
-pip install -r /home/psaha03/scratch/chest-xray-classification/requirements.txt    
+pip install -r /home/psaha03/scratch/cxr-generation-normal/requirements.txt  
 
-python /home/psaha03/scratch/chest-xray-classification/train.py --img_dir /home/psaha03/scratch/chest_xray_data
+python /home/psaha03/scratch/cxr-generation-normal/train.py --img_dir /home/psaha03/scratch/chest_xray_data
