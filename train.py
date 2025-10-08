@@ -16,7 +16,7 @@ from torch.utils.tensorboard import SummaryWriter
 from torchvision.utils import make_grid
 
 import config
-from data_loaders import ChestXRayDataset
+from data_loaders import ChestXRayDataset, ModelSpecificDataLoaders
 from model import get_model, load_checkpoint
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -38,7 +38,7 @@ class Trainer:
         logger.info(f"Using device: {self.device}")
         
         # Get data loaders
-        dataloaders = ChestXRayDataset.create_dataloaders(
+        dataloaders = ModelSpecificDataLoaders.create_dataloaders(
             data_dir=img_dir,
             model_name='densenet121',  # You can make this configurable
             batch_size=config.BATCH_SIZE,
