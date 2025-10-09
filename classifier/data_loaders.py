@@ -23,6 +23,8 @@ from pathlib import Path
 import random
 from typing import Tuple, Optional, Dict, List
 
+import config
+
 
 class ChestXRayDataset(Dataset):
     """Custom Dataset for Chest X-Ray images."""
@@ -115,23 +117,28 @@ class ChestXRayDataset(Dataset):
 
 
 class MedicalImageTransforms:
-    """Medical imaging appropriate transformations."""
+    """Medical imaging appropriate transformations using config settings."""
     
     @staticmethod
     def get_train_transforms(
-        image_size: Tuple[int, int] = (224, 224),
-        augmentation_strength: str = 'moderate'
+        image_size: Tuple[int, int] = None,
+        augmentation_strength: str = None
     ) -> transforms.Compose:
         """
-        Get training transformations with augmentation.
+        Get training transformations with augmentation using config settings.
         
         Args:
-            image_size: Target image size (height, width)
-            augmentation_strength: 'light', 'moderate', or 'strong'
+            image_size: Target image size (uses config.IMG_SIZE if None)
+            augmentation_strength: Augmentation level (uses config.AUGMENTATION_STRENGTH if None)
             
         Returns:
             Composed transforms for training
         """
+        # Use config values if not provided
+        if image_size is None:
+            image_size = config.IMG_SIZE
+        if augmentation_strength is None:
+            augmentation_strength = config.AUGMENTATION_STRENGTH
         
         # Base transforms
         base_transforms = [
@@ -166,8 +173,8 @@ class MedicalImageTransforms:
         final_transforms = [
             transforms.ToTensor(),
             transforms.Normalize(
-                mean=[0.485, 0.456, 0.406],  # ImageNet means
-                std=[0.229, 0.224, 0.225]    # ImageNet stds
+                mean=config.INFERENCE_MEAN,  # Use config means
+                std=config.INFERENCE_STD     # Use config stds
             )
         ]
         
@@ -175,112 +182,82 @@ class MedicalImageTransforms:
     
     @staticmethod
     def get_val_test_transforms(
-        image_size: Tuple[int, int] = (224, 224)
+        image_size: Tuple[int, int] = None
     ) -> transforms.Compose:
         """
-        Get validation/test transformations (no augmentation).
+        Get validation/test transformations (no augmentation) using config settings.
         
         Args:
-            image_size: Target image size (height, width)
+            image_size: Target image size (uses config.IMG_SIZE if None)
             
         Returns:
             Composed transforms for validation/testing
         """
+        # Use config value if not provided
+        if image_size is None:
+            image_size = config.IMG_SIZE
+            
         return transforms.Compose([
             transforms.Resize(image_size),
             transforms.ToTensor(),
             transforms.Normalize(
-                mean=[0.485, 0.456, 0.406],  # ImageNet means
-                std=[0.229, 0.224, 0.225]    # ImageNet stds
+                mean=config.INFERENCE_MEAN,  # Use config means
+                std=config.INFERENCE_STD     # Use config stds
             )
         ])
 
 
 class ModelSpecificDataLoaders:
-    """Factory class for creating model-specific data loaders."""
-    
-    # Model configurations
-    MODEL_CONFIGS = {
-        'densenet121': {
-            'image_size': (224, 224),
-            'batch_size': 32,
-            'augmentation': 'moderate'
-        },
-        'densenet169': {
-            'image_size': (224, 224),
-            'batch_size': 32,
-            'augmentation': 'moderate'
-        },
-        'densenet201': {
-            'image_size': (224, 224),
-            'batch_size': 16,
-            'augmentation': 'moderate'
-        },
-        'efficientnet_b0': {
-            'image_size': (224, 224),
-            'batch_size': 64,
-            'augmentation': 'strong'
-        },
-        'efficientnet_b1': {
-            'image_size': (240, 240),
-            'batch_size': 32,
-            'augmentation': 'strong'
-        },
-        'efficientnet_b3': {
-            'image_size': (300, 300),
-            'batch_size': 16,
-            'augmentation': 'strong'
-        },
-        'efficientnet_b4': {
-            'image_size': (380, 380),
-            'batch_size': 8,
-            'augmentation': 'strong'
-        }
-    }
+    """Factory class for creating model-specific data loaders using config settings."""
     
     @classmethod
     def create_dataloaders(
         cls,
         data_dir: str,
-        model_name: str,
+        model_name: str = None,
         batch_size: Optional[int] = None,
-        num_workers: int = 4,
-        pin_memory: bool = True
+        num_workers: int = None,
+        pin_memory: bool = None
     ) -> Dict[str, DataLoader]:
         """
-        Create data loaders for a specific model.
+        Create data loaders using config settings.
         
         Args:
             data_dir: Path to the chest_xray directory
-            model_name: Name of the model (e.g., 'densenet121', 'efficientnet_b0')
-            batch_size: Override default batch size
-            num_workers: Number of worker processes for data loading
-            pin_memory: Whether to pin memory for GPU transfer
+            model_name: Name of the model (uses config.MODEL_ARCHITECTURE if None)
+            batch_size: Override config batch size
+            num_workers: Override config num_workers
+            pin_memory: Override config pin_memory
             
         Returns:
             Dictionary with 'train', 'val', 'test' DataLoaders
         """
         
-        if model_name not in cls.MODEL_CONFIGS:
-            raise ValueError(f"Model {model_name} not supported. Available: {list(cls.MODEL_CONFIGS.keys())}")
+        # Use config values if not provided
+        if model_name is None:
+            model_name = config.MODEL_ARCHITECTURE
+        if batch_size is None:
+            batch_size = config.BATCH_SIZE
+        if num_workers is None:
+            num_workers = config.NUM_WORKERS
+        if pin_memory is None:
+            pin_memory = config.PIN_MEMORY
         
-        config = cls.MODEL_CONFIGS[model_name]
-        
-        # Use provided batch size or default
-        actual_batch_size = batch_size or config['batch_size']
+        # Get model config
+        model_config = config.MODEL_CONFIGS.get(model_name, config.CURRENT_MODEL_CONFIG)
         
         print(f"Creating data loaders for {model_name}")
-        print(f"Image size: {config['image_size']}")
-        print(f"Batch size: {actual_batch_size}")
-        print(f"Augmentation: {config['augmentation']}")
+        print(f"Image size: {model_config['image_size']}")
+        print(f"Batch size: {batch_size}")
+        print(f"Augmentation: {model_config['augmentation']}")
         
         # Create transforms
         train_transform = MedicalImageTransforms.get_train_transforms(
-            image_size=config['image_size'],
-            augmentation_strength=config['augmentation']
+            image_size=model_config['image_size'],
+            augmentation_strength=model_config['augmentation']
         )
         val_test_transform = MedicalImageTransforms.get_val_test_transforms(
-            image_size=config['image_size']
+            image_size=model_config['image_size']
         )
         
         # Create datasets
@@ -291,21 +268,30 @@ class ModelSpecificDataLoaders:
                 data_dir=data_dir,
                 split=split,
                 transform=transform,
-                image_size=config['image_size']
+                image_size=model_config['image_size']
             )
         
         # Create data loaders
         dataloaders = {}
         for split, dataset in datasets.items():
-            shuffle = (split == 'train')  # Only shuffle training data
+            # Use config settings for shuffle and drop_last
+            if split == 'train':
+                shuffle = config.TRAIN_SHUFFLE
+                drop_last = config.DROP_LAST_TRAIN
+            elif split == 'val':
+                shuffle = config.VAL_SHUFFLE
+                drop_last = config.DROP_LAST_VAL
+            else:  # test
+                shuffle = config.TEST_SHUFFLE
+                drop_last = config.DROP_LAST_TEST
             
             dataloaders[split] = DataLoader(
                 dataset,
-                batch_size=actual_batch_size,
+                batch_size=batch_size,
                 shuffle=shuffle,
                 num_workers=num_workers,
                 pin_memory=pin_memory,
-                drop_last=(split == 'train')  # Drop last incomplete batch for training
+                drop_last=drop_last
             )
         
         # Print dataset info

@@ -58,26 +58,31 @@ logger, _ = setup_logging()
 
 
 def get_transform():
-    """Get transform for inference"""
+    """Get transform for inference using config settings"""
     return transforms.Compose([
         transforms.Resize(config.IMG_SIZE),
         transforms.ToTensor(),
-        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+        transforms.Normalize(mean=config.INFERENCE_MEAN, std=config.INFERENCE_STD)
     ])
 
 
-def predict_single_image(image_path: str, model: torch.nn.Module, device: torch.device) -> Dict:
+def predict_single_image(image_path: str, model: torch.nn.Module, device: torch.device, threshold: float = None) -> Dict:
     """
-    Make prediction for a single image
+    Make prediction for a single image with custom threshold
     
     Args:
         image_path: Path to image file
         model: Trained model
         device: Device to run inference on
+        threshold: Threshold for pneumonia classification (uses config if None)
         
     Returns:
         Dictionary with prediction results
     """
+    # Use config threshold if not provided
+    if threshold is None:
+        threshold = config.CLASSIFICATION_THRESHOLD
+    
     transform = get_transform()
     
     # Load and preprocess image
@@ -88,46 +93,62 @@ def predict_single_image(image_path: str, model: torch.nn.Module, device: torch.
         logger.error(f"Error loading image {image_path}: {e}")
         return {'error': str(e)}
     
-    # Get prediction
+    # Get prediction with custom threshold
     model.eval()
     with torch.no_grad():
         output = model(input_tensor)
         probs = torch.softmax(output, dim=1)
-        pred_class = torch.argmax(probs, dim=1).item()
-        confidence = probs[0][pred_class].item()
+        
+        # Use threshold for pneumonia classification
+        pneumonia_prob = probs[0][1].item()  # Probability of pneumonia (class 1)
+        
+        if config.USE_CUSTOM_THRESHOLD:
+            pred_class = 1 if pneumonia_prob >= threshold else 0
+        else:
+            pred_class = torch.argmax(probs, dim=1).item()  # Standard argmax
+            
+        confidence = pneumonia_prob if pred_class == 1 else (1 - pneumonia_prob)
     
     result = {
         'image_path': image_path,
         'predicted_class': config.CLASSES[pred_class],
         'predicted_label': pred_class,
         'confidence': confidence,
+        'pneumonia_probability': pneumonia_prob,
+        'threshold_used': threshold,
         'class_probabilities': {cls: float(prob) for cls, prob in zip(config.CLASSES, probs[0].cpu().numpy())}
     }
     
     return result
 
 
-def predict_batch_images(image_paths: List[str], model: torch.nn.Module, device: torch.device) -> List[Dict]:
+def predict_batch_images(image_paths: List[str], model: torch.nn.Module, device: torch.device, threshold: float = None) -> List[Dict]:
     """
-    Make predictions for a batch of images
+    Make predictions for a batch of images with custom threshold
     
     Args:
         image_paths: List of paths to image files
         model: Trained model
         device: Device to run inference on
+        threshold: Threshold for pneumonia classification (default: 0.6)
         
     Returns:
         List of dictionaries with prediction results
     """
+    # Use config threshold if not provided
+    if threshold is None:
+        threshold = config.CLASSIFICATION_THRESHOLD
+        
     results = []
     for image_path in image_paths:
-        result = predict_single_image(image_path, model, device)
+        result = predict_single_image(image_path, model, device, threshold)
         results.append(result)
         
         if 'error' not in result:
             logger.info(f"Image: {os.path.basename(image_path)}, "
                        f"Prediction: {result['predicted_class']}, "
-                       f"Confidence: {result['confidence']:.4f}")
+                       f"Pneumonia Prob: {result['pneumonia_probability']:.4f}, "
+                       f"Threshold: {result['threshold_used']:.2f}")
     
     return results
 
@@ -226,14 +247,15 @@ def plot_sample_predictions(image_paths: List[str], predictions: List, labels: L
     plt.close()
 
 
-def test_model_on_dataset(model_path, test_data_dir, results_dir=None):
+def test_model_on_dataset(model_path, test_data_dir, results_dir=None, threshold=None):
     """
-    Test the trained model on the test dataset
+    Test the trained model on the test dataset with custom threshold
     
     Args:
         model_path: Path to the trained model (.pt file)
         test_data_dir: Path to the test data directory
         results_dir: Directory to save results (optional)
+        threshold: Threshold for pneumonia classification (default: 0.6)
     """
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     logger.info(f"Using device: {device}")
@@ -314,8 +336,10 @@ def test_model_on_dataset(model_path, test_data_dir, results_dir=None):
     # Set model to evaluation mode
     model.eval()
     
-    # Run inference
-    logger.info("Running inference on test set...")
+    # Run inference with custom threshold
+    logger.info(f"Running inference on test set with threshold = {threshold:.2f}")
+    logger.info(f"Classification rule: Pneumonia if P(pneumonia) >= {threshold:.2f}, Normal otherwise")
+    
     all_preds = []
     all_labels = []
     all_probs = []
@@ -332,12 +356,15 @@ def test_model_on_dataset(model_path, test_data_dir, results_dir=None):
             # Forward pass
             outputs = model(images)
             probs = torch.softmax(outputs, dim=1)
-            preds = torch.argmax(probs, dim=1).cpu().numpy()
+            
+            # Apply custom threshold for pneumonia classification
+            pneumonia_probs = probs[:, 1].cpu().numpy()  # Probability of pneumonia (class 1)
+            preds = (pneumonia_probs >= threshold).astype(int)  # 1 if >= threshold, 0 otherwise
             
             # Store results
             all_preds.extend(preds)
             all_labels.extend(labels)
-            all_probs.extend(probs[:, 1].cpu().numpy())  # Prob for pneumonia class (class 1)
+            all_probs.extend(pneumonia_probs)
     
     # Convert to numpy arrays for easier manipulation
     all_preds = np.array(all_preds)
@@ -361,22 +388,32 @@ def test_model_on_dataset(model_path, test_data_dir, results_dir=None):
     auc = roc_auc_score(all_labels, all_probs)
     cm = confusion_matrix(all_labels, all_preds)
     
-    # Print results
-    logger.info("=" * 60)
-    logger.info("TEST RESULTS")
-    logger.info("=" * 60)
+    # Print results with threshold information
+    logger.info("=" * 70)
+    logger.info("TEST RESULTS WITH THRESHOLD OPTIMIZATION")
+    logger.info("=" * 70)
+    logger.info(f"THRESHOLD USED: {threshold:.2f} (Pneumonia if P(pneumonia) >= {threshold:.2f})")
+    logger.info("-" * 70)
     logger.info(f"Accuracy:  {acc:.4f}")
     logger.info(f"Precision: {precision:.4f}")
     logger.info(f"Recall:    {recall:.4f}")
     logger.info(f"F1 Score:  {f1:.4f}")
     logger.info(f"AUC-ROC:   {auc:.4f}")
-    logger.info("=" * 60)
+    logger.info("=" * 70)
     logger.info("Confusion Matrix:")
     logger.info(f"                 Predicted")
     logger.info(f"              Normal  Pneumonia")
     logger.info(f"Actual Normal    {cm[0,0]:4d}     {cm[0,1]:4d}")  
     logger.info(f"    Pneumonia    {cm[1,0]:4d}     {cm[1,1]:4d}")
-    logger.info("=" * 60)
+    logger.info("-" * 70)
+    
+    # Calculate class-specific accuracies
+    normal_acc = cm[0,0] / (cm[0,0] + cm[0,1]) if (cm[0,0] + cm[0,1]) > 0 else 0
+    pneumonia_acc = cm[1,1] / (cm[1,0] + cm[1,1]) if (cm[1,0] + cm[1,1]) > 0 else 0
+    
+    logger.info(f"NORMAL Classification Accuracy: {normal_acc:.4f} ({cm[0,0]}/{cm[0,0] + cm[0,1]})")
+    logger.info(f"PNEUMONIA Classification Accuracy: {pneumonia_acc:.4f} ({cm[1,1]}/{cm[1,0] + cm[1,1]})")
+    logger.info("=" * 70)
     
     # Print detailed classification report
     class_report = classification_report(all_labels, all_preds, target_names=['Normal', 'Pneumonia'])
@@ -489,14 +526,15 @@ def load_model_for_inference(model_path: str, device: torch.device):
             raise e2
 
 
-def predict_images(image_paths: List[str], model_path: str, results_dir: str = None):
+def predict_images(image_paths: List[str], model_path: str, results_dir: str = None, threshold: float = 0.6):
     """
-    Run inference on individual images
+    Run inference on individual images with custom threshold
     
     Args:
         image_paths: List of image file paths
         model_path: Path to trained model
         results_dir: Directory to save results
+        threshold: Threshold for pneumonia classification
     """
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     logger.info(f"Using device: {device}")
@@ -504,9 +542,9 @@ def predict_images(image_paths: List[str], model_path: str, results_dir: str = N
     # Load model
     model = load_model_for_inference(model_path, device)
     
-    # Make predictions
-    logger.info(f"Making predictions on {len(image_paths)} images...")
-    results = predict_batch_images(image_paths, model, device)
+    # Make predictions with threshold
+    logger.info(f"Making predictions on {len(image_paths)} images with threshold {threshold:.2f}...")
+    results = predict_batch_images(image_paths, model, device, threshold)
     
     # Save results if directory provided
     if results_dir:
@@ -520,6 +558,8 @@ def predict_images(image_paths: List[str], model_path: str, results_dir: str = N
                     'image_path': result['image_path'],
                     'predicted_class': result['predicted_class'],
                     'confidence': result['confidence'],
+                    'pneumonia_probability': result.get('pneumonia_probability', 0),
+                    'threshold_used': result.get('threshold_used', threshold),
                     'normal_prob': result['class_probabilities'].get('normal', 0),
                     'abnormal_prob': result['class_probabilities'].get('abnormal', 0)
                 })
@@ -546,6 +586,8 @@ def main():
                         help="Output directory for results (default: ./test_results)")
     parser.add_argument("--log", type=str, default=None,
                         help="Log file path (default: auto-generated)")
+    parser.add_argument("--threshold", type=float, default=0.6,
+                        help="Threshold for pneumonia classification (default: 0.6)")
     
     args = parser.parse_args()
     
@@ -568,6 +610,7 @@ def main():
     logger.info(f"Model: {args.model}")
     logger.info(f"Data: {args.data}")
     logger.info(f"Output: {args.output}")
+    logger.info(f"Threshold: {args.threshold:.2f}")
     
     if args.mode == 'test':
         # Full dataset evaluation
@@ -575,7 +618,7 @@ def main():
             logger.error(f"Test data directory not found: {args.data}")
             sys.exit(1)
         
-        results = test_model_on_dataset(args.model, args.data, args.output)
+        results = test_model_on_dataset(args.model, args.data, args.output, args.threshold)
         logger.info("Dataset testing completed successfully!")
         
     elif args.mode == 'predict':
@@ -598,7 +641,7 @@ def main():
             logger.error(f"No valid images found in {args.data}")
             sys.exit(1)
         
-        results = predict_images(image_paths, args.model, args.output)
+        results = predict_images(image_paths, args.model, args.output, args.threshold)
         logger.info("Image prediction completed successfully!")
 
 

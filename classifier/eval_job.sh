@@ -3,7 +3,7 @@
 #SBATCH --nodes=1
 #SBATCH --cpus-per-task=8
 #SBATCH --ntasks-per-node=1
-#SBATCH --mem=16G
+#SBATCH --mem=80000M
 #SBATCH --time=0-01:00:00
 
 # Load the required modules
@@ -23,11 +23,12 @@ cd /home/psaha03/scratch/cxr-generation/classifier
 OUTPUT_DIR="./test_results_$(date +%Y%m%d_%H%M%S)"
 mkdir -p "$OUTPUT_DIR"
 
-# Run evaluation
+# Run evaluation with threshold optimization (0.6 for pneumonia classification)
 python evaluate.py \
     --mode test \
-    --model /home/psaha03/scratch/classifier_results/models/densenet_classifier_best.pt \
+    --model /home/psaha03/scratch/classifier_results/densenet/with_classweight/models/densenet_classifier_best.pt \
     --data /home/psaha03/scratch/chest_xray_data/test \
-    --output "$OUTPUT_DIR"
+    --output "$OUTPUT_DIR" \
+    --threshold 0.6
 
 echo "Evaluation completed. Results saved to: $OUTPUT_DIR"
