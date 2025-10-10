@@ -29,6 +29,6 @@ python evaluate.py \
     --model /home/psaha03/scratch/classifier_results/densenet/with_classweight/models/densenet_classifier_best.pt \
     --data /home/psaha03/scratch/chest_xray_data/test \
     --output "$OUTPUT_DIR" \
-    --threshold 0.6
+    --threshold 0.5
 
 echo "Evaluation completed. Results saved to: $OUTPUT_DIR"

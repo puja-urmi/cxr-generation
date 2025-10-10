@@ -71,7 +71,7 @@ CUSTOM_CLASS_WEIGHTS = [1.0, 1.0]  # Only used if method is 'custom'
 
 # ===== EVALUATION SETTINGS =====
 # Threshold for binary classification
-CLASSIFICATION_THRESHOLD = 0.6  # Pneumonia if P(pneumonia) >= threshold
+CLASSIFICATION_THRESHOLD = 0.5 # Pneumonia if P(pneumonia) >= threshold
 USE_CUSTOM_THRESHOLD = True  # If False, uses argmax (0.5 threshold)
 
 # Metrics to compute
