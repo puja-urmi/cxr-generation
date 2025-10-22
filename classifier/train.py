@@ -189,17 +189,17 @@ class Trainer:
         # Class-specific accuracy
         normal_correct = cm[0, 0] if cm.shape[0] > 0 else 0
         normal_total = cm[0, 0] + cm[0, 1] if cm.shape[0] > 0 else 1
-        pneumonia_correct = cm[1, 1] if cm.shape[0] > 1 else 0
-        pneumonia_total = cm[1, 0] + cm[1, 1] if cm.shape[0] > 1 else 1
+        abnormal_correct = cm[1, 1] if cm.shape[0] > 1 else 0
+        abnormal_total = cm[1, 0] + cm[1, 1] if cm.shape[0] > 1 else 1
         
         normal_acc = normal_correct / normal_total if normal_total > 0 else 0
-        pneumonia_acc = pneumonia_correct / pneumonia_total if pneumonia_total > 0 else 0
+        abnormal_acc = abnormal_correct / abnormal_total if abnormal_total > 0 else 0
         
         # Log metrics to TensorBoard
         self.writer.add_scalar('Loss/validation', val_loss, epoch)
         self.writer.add_scalar('Accuracy/validation', val_acc, epoch)
         self.writer.add_scalar('Accuracy/normal', normal_acc, epoch)
-        self.writer.add_scalar('Accuracy/pneumonia', pneumonia_acc, epoch)
+        self.writer.add_scalar('Accuracy/abnormal', abnormal_acc, epoch)
         self.writer.add_scalar('Precision/validation', val_precision, epoch)
         self.writer.add_scalar('Recall/validation', val_recall, epoch)
         self.writer.add_scalar('F1/validation', val_f1, epoch)
@@ -213,7 +213,7 @@ class Trainer:
         logger.info(f'Epoch [{epoch+1}/{config.EPOCHS}] VALIDATION RESULTS:')
         logger.info(f'  Overall - Loss: {val_loss:.4f}, Acc: {val_acc:.4f}, F1: {val_f1:.4f}, AUC: {val_auc:.4f}')
         logger.info(f'  Class-specific - Normal Acc: {normal_acc:.4f} ({normal_correct}/{normal_total}), '
-                   f'Pneumonia Acc: {pneumonia_acc:.4f} ({pneumonia_correct}/{pneumonia_total})')
+                   f'Abnormal Acc: {abnormal_acc:.4f} ({abnormal_correct}/{abnormal_total})')
         logger.info(f'  Precision: {val_precision:.4f}, Recall: {val_recall:.4f}')
         
         # Log confusion matrix details

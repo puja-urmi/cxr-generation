@@ -50,7 +50,7 @@ USE_CUSTOM_THRESHOLD = True
 # ===== CLASS DEFINITIONS =====
 CLASSES = ['normal', 'abnormal']
 NUM_CLASSES = len(CLASSES)
-CLASS_NAMES = ['Normal', 'Pneumonia']
+CLASS_NAMES = ['Normal', 'Abnormal']
 
 # ===== FILE PATHS =====
 MODEL_DIR = os.path.join(BASE_DIR, 'models')

@@ -40,8 +40,8 @@ class ChestXRayDataset(Dataset):
         self.image_size = image_size if image_size is not None else config.IMG_SIZE
         
         # Class to index mapping
-        self.class_to_idx = {'NORMAL': 0, 'PNEUMONIA': 1}
-        self.idx_to_class = {0: 'NORMAL', 1: 'PNEUMONIA'}
+        self.class_to_idx = {'NORMAL': 0, 'ABNORMAL': 1}
+        self.idx_to_class = {0: 'NORMAL', 1: 'ABNORMAL'}
         
         # Load image paths and labels
         self.samples = self._load_samples()
@@ -53,7 +53,7 @@ class ChestXRayDataset(Dataset):
         """Load all image paths and their corresponding labels."""
         samples = []
         
-        for class_name in ['NORMAL', 'PNEUMONIA']:
+        for class_name in ['NORMAL', 'ABNORMAL']:
             class_dir = self.data_dir / self.split / class_name
             if class_dir.exists():
                 # Load all common image formats
@@ -64,10 +64,11 @@ class ChestXRayDataset(Dataset):
                         samples.append((img_path, label))
                         class_count += 1
                 
+                logger.info(f"Found {class_count} {class_name} images in {class_dir}")
                 if class_count == 0:
                     logger.warning(f"No images found in {class_dir} for supported formats (jpeg, jpg, png)")
             else:
-                logger.warning(f"Class directory not found: {class_dir}")
+                logger.error(f"Class directory not found: {class_dir}")
         
         if len(samples) == 0:
             raise ValueError(f"No images found in {self.data_dir}/{self.split}. Check directory structure and image formats.")
@@ -76,7 +77,7 @@ class ChestXRayDataset(Dataset):
     
     def _get_class_distribution(self) -> Dict[str, int]:
         """Get the distribution of classes in the dataset."""
-        distribution = {'NORMAL': 0, 'PNEUMONIA': 0}
+        distribution = {'NORMAL': 0, 'ABNORMAL': 0}
         for _, label in self.samples:
             class_name = self.idx_to_class[label]
             distribution[class_name] += 1
