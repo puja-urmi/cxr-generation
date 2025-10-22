@@ -16,7 +16,7 @@ from torch.utils.tensorboard import SummaryWriter
 from torchvision.utils import make_grid
 
 import config
-from data_loaders import ChestXRayDataset, ModelSpecificDataLoaders
+from data_loaders import ModelSpecificDataLoaders
 from model import get_model, load_checkpoint
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -34,6 +34,11 @@ class Trainer:
             img_dir: Directory with images
             resume: Whether to resume from checkpoint
         """
+        # Validate required directories exist
+        for path in [config.TRAIN_PATH, config.VAL_PATH]:
+            if not os.path.exists(path):
+                raise FileNotFoundError(f"Required directory not found: {path}")
+        
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         logger.info(f"Using device: {self.device}")
         

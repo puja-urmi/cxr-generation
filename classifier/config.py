@@ -13,6 +13,12 @@ MODEL_ARCHITECTURE = 'densenet121'
 MODEL_NAME = "densenet_classifier"
 PRETRAINED = True
 
+# Model architecture parameters
+HIDDEN_SIZE_1 = 512
+HIDDEN_SIZE_2 = 128
+DROPOUT_1 = 0.3
+DROPOUT_2 = 0.2
+
 # ===== IMAGE SETTINGS =====
 IMG_SIZE = (224, 224)
 CHANNELS = 3
@@ -48,12 +54,16 @@ CLASS_NAMES = ['Normal', 'Pneumonia']
 
 # ===== FILE PATHS =====
 MODEL_DIR = os.path.join(BASE_DIR, 'models')
-RESULTS_DIR = os.path.join(BASE_DIR, 'results')
 TENSORBOARD_DIR = os.path.join(BASE_DIR, 'runs')
+
+# Data paths (default data directory structure)
+DATA_ROOT = '/home/psaha03/scratch/chest_xray'
+TRAIN_PATH = os.path.join(DATA_ROOT, 'train')
+VAL_PATH = os.path.join(DATA_ROOT, 'val')
+TEST_PATH = os.path.join(DATA_ROOT, 'test')
 
 # Create directories
 os.makedirs(MODEL_DIR, exist_ok=True)
-os.makedirs(RESULTS_DIR, exist_ok=True)
 os.makedirs(TENSORBOARD_DIR, exist_ok=True)
 
 # Model checkpoint path

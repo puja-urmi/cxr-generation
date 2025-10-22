@@ -52,13 +52,13 @@ class XRayClassifier(nn.Module):
         
         # Custom classifier head
         self.classifier = nn.Sequential(
-            nn.Linear(num_features, 512),
+            nn.Linear(num_features, config.HIDDEN_SIZE_1),
             nn.ReLU(),
-            nn.Dropout(0.3),
-            nn.Linear(512, 128),
+            nn.Dropout(config.DROPOUT_1),
+            nn.Linear(config.HIDDEN_SIZE_1, config.HIDDEN_SIZE_2),
             nn.ReLU(),
-            nn.Dropout(0.2),
-            nn.Linear(128, config.NUM_CLASSES)
+            nn.Dropout(config.DROPOUT_2),
+            nn.Linear(config.HIDDEN_SIZE_2, config.NUM_CLASSES)
         )
         
         logger.info(f"Initialized {backbone} model with {'pretrained' if pretrained else 'random'} weights")
@@ -94,8 +94,12 @@ def get_model(device: torch.device) -> XRayClassifier:
     Returns:
         Initialized model on device
     """
-    model = XRayClassifier(backbone='densenet121', pretrained=True)
+    if not isinstance(device, torch.device):
+        raise ValueError(f"Expected torch.device, got {type(device)}")
+    
+    model = XRayClassifier(backbone=config.MODEL_ARCHITECTURE, pretrained=config.PRETRAINED)
     model = model.to(device)
+    logger.info(f"Model created and moved to {device}")
     return model
 
 

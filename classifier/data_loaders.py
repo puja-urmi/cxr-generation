@@ -2,6 +2,7 @@
 Data Loaders for Chest X-Ray Dataset
 """
 
+import logging
 import torch
 from torch.utils.data import Dataset, DataLoader
 import torchvision.transforms as transforms
@@ -10,6 +11,8 @@ from pathlib import Path
 from typing import Tuple, Optional, Dict, List
 
 import config
+
+logger = logging.getLogger(__name__)
 
 
 class ChestXRayDataset(Dataset):
@@ -20,7 +23,7 @@ class ChestXRayDataset(Dataset):
         data_dir: str, 
         split: str = 'train',
         transform: Optional[transforms.Compose] = None,
-        image_size: Tuple[int, int] = (224, 224)
+        image_size: Tuple[int, int] = None
     ):
         """
         Initialize the dataset.
@@ -34,7 +37,7 @@ class ChestXRayDataset(Dataset):
         self.data_dir = Path(data_dir)
         self.split = split
         self.transform = transform
-        self.image_size = image_size
+        self.image_size = image_size if image_size is not None else config.IMG_SIZE
         
         # Class to index mapping
         self.class_to_idx = {'NORMAL': 0, 'PNEUMONIA': 1}
@@ -43,8 +46,8 @@ class ChestXRayDataset(Dataset):
         # Load image paths and labels
         self.samples = self._load_samples()
         
-        print(f"Loaded {len(self.samples)} images for {split} split")
-        print(f"Class distribution: {self._get_class_distribution()}")
+        logger.info(f"Loaded {len(self.samples)} images for {split} split")
+        logger.info(f"Class distribution: {self._get_class_distribution()}")
     
     def _load_samples(self) -> List[Tuple[Path, int]]:
         """Load all image paths and their corresponding labels."""
@@ -54,10 +57,20 @@ class ChestXRayDataset(Dataset):
             class_dir = self.data_dir / self.split / class_name
             if class_dir.exists():
                 # Load all common image formats
+                class_count = 0
                 for ext in ['*.jpeg', '*.jpg', '*.png']:
                     for img_path in class_dir.glob(ext):
                         label = self.class_to_idx[class_name]
                         samples.append((img_path, label))
+                        class_count += 1
+                
+                if class_count == 0:
+                    logger.warning(f"No images found in {class_dir} for supported formats (jpeg, jpg, png)")
+            else:
+                logger.warning(f"Class directory not found: {class_dir}")
+        
+        if len(samples) == 0:
+            raise ValueError(f"No images found in {self.data_dir}/{self.split}. Check directory structure and image formats.")
         
         return samples
     
@@ -150,9 +163,9 @@ class ModelSpecificDataLoaders:
         Returns:
             Dictionary with 'train', 'val', 'test' DataLoaders
         """
-        print(f"Creating data loaders for {config.MODEL_ARCHITECTURE}")
-        print(f"Image size: {config.IMG_SIZE}")
-        print(f"Batch size: {config.BATCH_SIZE}")
+        logger.info(f"Creating data loaders for {config.MODEL_ARCHITECTURE}")
+        logger.info(f"Image size: {config.IMG_SIZE}")
+        logger.info(f"Batch size: {config.BATCH_SIZE}")
         
         # Create transforms
         train_transform = MedicalImageTransforms.get_train_transforms()
@@ -184,8 +197,8 @@ class ModelSpecificDataLoaders:
             )
         
         # Print dataset info
-        print(f"\nDataset sizes:")
+        logger.info("Dataset sizes:")
         for split, loader in dataloaders.items():
-            print(f"  {split}: {len(loader.dataset)} images, {len(loader)} batches")
+            logger.info(f"  {split}: {len(loader.dataset)} images, {len(loader)} batches")
         
         return dataloaders

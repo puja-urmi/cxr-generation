@@ -19,7 +19,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 
 # Add the classifier directory to the path
-sys.path.append('/home/psaha03/scratch/cxr-generation/classifier')
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 import config
 from model import XRayClassifier, load_checkpoint
@@ -40,6 +40,12 @@ def get_transform():
 
 def predict_single_image(image_path: str, model: torch.nn.Module, device: torch.device, threshold: float = 0.5) -> Dict:
     """Make prediction for a single image"""
+    if not os.path.exists(image_path):
+        return {'error': f'Image file not found: {image_path}'}
+    
+    if not 0 <= threshold <= 1:
+        return {'error': f'Threshold must be between 0 and 1, got {threshold}'}
+    
     transform = get_transform()
     
     # Load and preprocess image
@@ -159,7 +165,8 @@ def test_model_on_dataset(model_path, test_data_dir, results_dir=None, threshold
     try:
         test_dataset = datasets.ImageFolder(root=test_data_dir, transform=test_transform)
         test_loader = torch.utils.data.DataLoader(
-            test_dataset, batch_size=32, shuffle=False, num_workers=4, pin_memory=True
+            test_dataset, batch_size=config.BATCH_SIZE, shuffle=False, 
+            num_workers=config.NUM_WORKERS, pin_memory=config.PIN_MEMORY
         )
         
         logger.info(f"Test dataset: {len(test_dataset)} images, {len(test_loader)} batches")
@@ -174,7 +181,7 @@ def test_model_on_dataset(model_path, test_data_dir, results_dir=None, threshold
     
     # Load model
     logger.info("Loading trained model...")
-    model = XRayClassifier(backbone='densenet121', pretrained=False)
+    model = XRayClassifier(backbone=config.MODEL_ARCHITECTURE, pretrained=False)
     model = model.to(device)
     
     try:
@@ -363,7 +370,7 @@ def test_model_on_dataset(model_path, test_data_dir, results_dir=None, threshold
 
 def load_model_for_inference(model_path: str, device: torch.device):
     """Load model for inference"""
-    model = XRayClassifier(backbone='densenet121', pretrained=False)
+    model = XRayClassifier(backbone=config.MODEL_ARCHITECTURE, pretrained=False)
     model = model.to(device)
     model, checkpoint = load_checkpoint(model, model_path)
     logger.info(f"Successfully loaded model from {model_path}")
@@ -419,8 +426,16 @@ def main():
                         help="Output directory for results")
     parser.add_argument("--threshold", type=float, default=0.5,
                         help="Threshold for pneumonia classification")
+    parser.add_argument("--quiet", "-q", action="store_true",
+                        help="Reduce logging output (only show key results)")
     
     args = parser.parse_args()
+    
+    # Set logging level based on quiet flag
+    if args.quiet:
+        logging.getLogger().setLevel(logging.WARNING)
+        # Only show essential results
+        logging.getLogger(__name__).setLevel(logging.INFO)
     
     # Set default output directory
     if args.output is None:
