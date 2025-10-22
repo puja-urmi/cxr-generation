@@ -26,8 +26,8 @@ mkdir -p "$OUTPUT_DIR"
 # Run evaluation with threshold optimization (0.6 for pneumonia classification)
 python evaluate.py \
     --mode test \
-    --model /home/psaha03/scratch/classifier_results/densenet/with_classweight/models/densenet_classifier_best.pt \
-    --data /home/psaha03/scratch/chest_xray_data/test \
+    --model /home/psaha03/scratch/classifier_results/balanced/models/densenet_classifier_best.pt \
+    --data /home/psaha03/scratch/chest_xray/test \
     --output "$OUTPUT_DIR" \
     --threshold 0.5
 

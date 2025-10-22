@@ -13,4 +13,4 @@ module load gcc opencv
 source /home/psaha03/scratch/env/bin/activate
 pip install -r /home/psaha03/scratch/cxr-generation/classifier/requirements.txt
 
-python /home/psaha03/scratch/cxr-generation/classifier/train.py --img_dir /home/psaha03/scratch/chest_xray_data
+python /home/psaha03/scratch/cxr-generation/classifier/train.py --img_dir /home/psaha03/scratch/chest_xray

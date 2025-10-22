@@ -52,29 +52,18 @@ class Trainer:
         self.model = get_model(self.device)
         
         # Define loss and optimizer using config settings
-        class_weights = self._compute_class_weights() if config.USE_CLASS_WEIGHTS else None
-        self.criterion = nn.CrossEntropyLoss(weight=class_weights)
+        # Class weights disabled since dataset is now balanced (50-50 split)
+        self.criterion = nn.CrossEntropyLoss()
         
         # Create optimizer based on config
         if config.OPTIMIZER == 'Adam':
             self.optimizer = optim.Adam(self.model.parameters(), lr=config.LEARNING_RATE, weight_decay=config.WEIGHT_DECAY)
-        elif config.OPTIMIZER == 'SGD':
-            self.optimizer = optim.SGD(self.model.parameters(), lr=config.LEARNING_RATE, momentum=config.MOMENTUM, weight_decay=config.WEIGHT_DECAY)
-        elif config.OPTIMIZER == 'AdamW':
-            self.optimizer = optim.AdamW(self.model.parameters(), lr=config.LEARNING_RATE, weight_decay=config.WEIGHT_DECAY)
         else:
             raise ValueError(f"Unsupported optimizer: {config.OPTIMIZER}")
         
         # Create scheduler based on config
         if config.USE_SCHEDULER:
-            if config.SCHEDULER_TYPE == 'ReduceLROnPlateau':
-                self.scheduler = ReduceLROnPlateau(self.optimizer, mode='min', factor=config.SCHEDULER_FACTOR, patience=config.SCHEDULER_PATIENCE)
-            elif config.SCHEDULER_TYPE == 'StepLR':
-                from torch.optim.lr_scheduler import StepLR
-                self.scheduler = StepLR(self.optimizer, step_size=config.SCHEDULER_STEP_SIZE, gamma=config.SCHEDULER_GAMMA)
-            elif config.SCHEDULER_TYPE == 'CosineAnnealingLR':
-                from torch.optim.lr_scheduler import CosineAnnealingLR
-                self.scheduler = CosineAnnealingLR(self.optimizer, T_max=config.EPOCHS)
+            self.scheduler = ReduceLROnPlateau(self.optimizer, mode='min', factor=config.SCHEDULER_FACTOR, patience=config.SCHEDULER_PATIENCE)
         else:
             self.scheduler = None
         
@@ -92,50 +81,6 @@ class Trainer:
         if resume and os.path.exists(config.CHECKPOINT_PATH):
             self._resume_from_checkpoint()
     
-    def _compute_class_weights(self):
-        """Compute class weights to handle imbalanced data"""
-        # Count class occurrences in training data
-        class_counts = np.zeros(config.NUM_CLASSES)
-        
-        # More efficient counting using dataset samples directly
-        if hasattr(self.train_loader.dataset, 'samples'):
-            # For custom datasets with samples attribute
-            for _, label in self.train_loader.dataset.samples:
-                class_counts[label] += 1
-        else:
-            # Fallback: iterate through dataloader (slower but works for any dataset)
-            logger.info("Counting class samples from dataloader (this may take a moment)...")
-            for batch in self.train_loader:
-                # DataLoader returns (images, labels) tuple
-                images, labels = batch
-                labels = labels.cpu().numpy()
-                for label in range(config.NUM_CLASSES):
-                    class_counts[label] += np.sum(labels == label)
-        
-        # Compute weights using sklearn's balanced approach
-        total_samples = np.sum(class_counts)
-        class_weights = total_samples / (config.NUM_CLASSES * class_counts)
-        
-        # Alternative: Use sklearn's balanced approach
-        # from sklearn.utils.class_weight import compute_class_weight
-        # class_weights = compute_class_weight('balanced', classes=np.arange(config.NUM_CLASSES), y=all_labels)
-        
-        weights_tensor = torch.FloatTensor(class_weights).to(self.device)
-        
-        # Enhanced logging
-        logger.info("=" * 50)
-        logger.info("CLASS WEIGHT ANALYSIS")
-        logger.info("=" * 50)
-        logger.info(f"Class counts: {class_counts}")
-        logger.info(f"Class distribution: {class_counts / total_samples * 100}")
-        logger.info(f"Class weights: {class_weights}")
-        logger.info(f"Normal (class 0) weight: {class_weights[0]:.4f}")
-        logger.info(f"Pneumonia (class 1) weight: {class_weights[1]:.4f}")
-        logger.info(f"Weight ratio (Normal/Pneumonia): {class_weights[0]/class_weights[1]:.4f}")
-        logger.info("=" * 50)
-        
-        return weights_tensor
-        
     def _resume_from_checkpoint(self):
         """Resume training from checkpoint"""
         try:
@@ -175,8 +120,8 @@ class Trainer:
             all_preds.extend(preds.cpu().numpy())
             all_labels.extend(labels.cpu().numpy())
             
-            # Log progress using config frequency
-            if (i+1) % config.LOG_TRAIN_EVERY == 0:
+            # Log progress
+            if (i+1) % 20 == 0:
                 logger.info(f'Epoch [{epoch+1}/{config.EPOCHS}], Step [{i+1}/{len(self.train_loader)}], '
                            f'Loss: {loss.item():.4f}')
         
@@ -255,8 +200,8 @@ class Trainer:
         self.writer.add_scalar('F1/validation', val_f1, epoch)
         self.writer.add_scalar('AUC/validation', val_auc, epoch)
         
-        # Log example predictions with images
-        if epoch % 5 == 0:  # Log images every 5 epochs to avoid clutter
+        # Log example predictions occasionally
+        if epoch % 5 == 0:
             self._log_prediction_examples(epoch)
         
         # Enhanced logging with class-specific metrics
@@ -270,12 +215,9 @@ class Trainer:
         if cm.shape[0] >= 2 and cm.shape[1] >= 2:
             logger.info(f'  Confusion Matrix: TN={cm[0,0]}, FP={cm[0,1]}, FN={cm[1,0]}, TP={cm[1,1]}')
         
-        # Update learning rate based on validation loss (if scheduler is enabled)
+        # Update learning rate based on validation loss
         if self.scheduler is not None:
-            if config.SCHEDULER_TYPE == 'ReduceLROnPlateau':
-                self.scheduler.step(val_loss)
-            else:
-                self.scheduler.step()
+            self.scheduler.step(val_loss)
         
         # Save checkpoint if best model so far
         if val_loss < self.best_val_loss:
@@ -286,11 +228,8 @@ class Trainer:
         return val_loss, val_acc, val_precision, val_recall, val_f1, val_auc
     
     def _log_prediction_examples(self, epoch):
-        """Log example predictions with images to TensorBoard"""
+        """Log example predictions to TensorBoard"""
         self.model.eval()
-        example_images = []
-        example_labels = []
-        example_preds = []
         
         # Get a batch of validation images
         for batch in self.val_loader:
@@ -302,27 +241,10 @@ class Trainer:
                 outputs = self.model(images)
                 _, preds = torch.max(outputs, 1)
             
-            # Convert back to CPU and numpy for logging
-            images_cpu = images.cpu()
-            labels_cpu = labels.cpu().numpy()
-            preds_cpu = preds.cpu().numpy()
-            
-            # Only take the first 8 examples to avoid cluttering TensorBoard
-            example_images = images_cpu[:8]
-            example_labels = labels_cpu[:8]
-            example_preds = preds_cpu[:8]
+            # Take first 8 examples
+            img_grid = make_grid(images[:8].cpu(), nrow=4, normalize=True)
+            self.writer.add_image('Predictions', img_grid, global_step=epoch)
             break
-        
-        # Create a grid of images with labels
-        img_grid = make_grid(example_images, nrow=4, normalize=True)
-        
-        # Add prediction labels
-        pred_labels = [f"True: {config.CLASSES[l]}, Pred: {config.CLASSES[p]}" 
-                       for l, p in zip(example_labels, example_preds)]
-        
-        # Log to TensorBoard
-        self.writer.add_image('Predictions', img_grid, global_step=epoch)
-        self.writer.add_text('Prediction Labels', str(pred_labels), global_step=epoch)
     
     def _save_checkpoint(self, epoch, val_loss):
         """Save model checkpoint"""
@@ -384,22 +306,11 @@ class Trainer:
                     logger.info(f"Early stopping after {epoch+1} epochs")
                     break
         
-        # Log model graph to TensorBoard
-        try:
-            # Get a sample batch for model graph
-            sample_batch = next(iter(self.train_loader))
-            sample_images, _ = sample_batch
-            sample_images = sample_images.to(self.device)
-            self.writer.add_graph(self.model, sample_images)
-        except Exception as e:
-            logger.warning(f"Failed to log model graph: {e}")
-        
         # Close the TensorBoard writer
         self.writer.close()
         
         logger.info("Training completed")
         logger.info(f"TensorBoard logs saved to {self.writer.log_dir}")
-        logger.info("To view training visualizations, run: tensorboard --logdir=runs")
         
         return history
 
