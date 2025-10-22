@@ -61,16 +61,16 @@ def predict_single_image(image_path: str, model: torch.nn.Module, device: torch.
     with torch.no_grad():
         output = model(input_tensor)
         probs = torch.softmax(output, dim=1)
-        abnormal_prob = probs[0][1].item()
-        pred_class = 1 if abnormal_prob >= threshold else 0
-        confidence = abnormal_prob if pred_class == 1 else (1 - abnormal_prob)
-    
+        unhealthy_prob = probs[0][1].item()
+        pred_class = 1 if unhealthy_prob >= threshold else 0
+        confidence = unhealthy_prob if pred_class == 1 else (1 - unhealthy_prob)
+
     return {
         'image_path': image_path,
         'predicted_class': config.CLASSES[pred_class],
         'predicted_label': pred_class,
         'confidence': confidence,
-        'abnormal_probability': abnormal_prob,
+        'unhealthy_probability': unhealthy_prob,
         'threshold_used': threshold
     }
 
@@ -85,7 +85,7 @@ def predict_batch_images(image_paths: List[str], model: torch.nn.Module, device:
         if 'error' not in result:
             logger.info(f"Image: {os.path.basename(image_path)}, "
                        f"Prediction: {result['predicted_class']}, "
-                       f"Abnormal Prob: {result['abnormal_probability']:.4f}")
+                       f"Unhealthy Prob: {result['unhealthy_probability']:.4f}")
     
     return results
 
@@ -212,16 +212,16 @@ def test_model_on_dataset(model_path, test_data_dir, results_dir=None, threshold
             # Forward pass
             outputs = model(images)
             probs = torch.softmax(outputs, dim=1)
-            
-            # Apply threshold for abnormal classification
-            abnormal_probs = probs[:, 1].cpu().numpy()
-            preds = (abnormal_probs >= threshold).astype(int)
-            
+
+            # Apply threshold for unhealthy classification
+            unhealthy_probs = probs[:, 1].cpu().numpy()
+            preds = (unhealthy_probs >= threshold).astype(int)
+
             # Store results
             all_preds.extend(preds)
             all_labels.extend(labels)
-            all_probs.extend(abnormal_probs)
-    
+            all_probs.extend(unhealthy_probs)
+
     # Convert to numpy arrays
     all_preds = np.array(all_preds)
     all_labels = np.array(all_labels)
@@ -243,7 +243,7 @@ def test_model_on_dataset(model_path, test_data_dir, results_dir=None, threshold
     cm = confusion_matrix(all_labels, all_preds)
     
     # Calculate specificity (True Negatives / (True Negatives + False Positives))
-    # Specificity measures the model's ability to correctly identify normal (healthy) cases
+    # Specificity measures the model's ability to correctly identify healthy cases
     tn, fp, fn, tp = cm.ravel()
     specificity = tn / (tn + fp) if (tn + fp) > 0 else 0
     
@@ -251,7 +251,7 @@ def test_model_on_dataset(model_path, test_data_dir, results_dir=None, threshold
     logger.info("=" * 70)
     logger.info("TEST RESULTS WITH THRESHOLD OPTIMIZATION")
     logger.info("=" * 70)
-    logger.info(f"THRESHOLD USED: {threshold:.2f} (Abnormal if P(abnormal) >= {threshold:.2f})")
+    logger.info(f"THRESHOLD USED: {threshold:.2f} (Unhealthy if P(unhealthy) >= {threshold:.2f})")
     logger.info("-" * 70)
     logger.info(f"Accuracy:   {acc:.4f}")
     logger.info(f"Precision:  {precision:.4f}")
@@ -262,21 +262,21 @@ def test_model_on_dataset(model_path, test_data_dir, results_dir=None, threshold
     logger.info("=" * 70)
     logger.info("Confusion Matrix:")
     logger.info(f"                 Predicted")
-    logger.info(f"              Normal  Abnormal")
-    logger.info(f"Actual Normal    {cm[0,0]:4d}     {cm[0,1]:4d}")  
-    logger.info(f"    Abnormal     {cm[1,0]:4d}     {cm[1,1]:4d}")
+    logger.info(f"              Healthy  Unhealthy")
+    logger.info(f"Actual Healthy    {cm[0,0]:4d}     {cm[0,1]:4d}")  
+    logger.info(f"    Unhealthy     {cm[1,0]:4d}     {cm[1,1]:4d}")
     logger.info("-" * 70)
     
     # Calculate class-specific accuracies
-    normal_acc = cm[0,0] / (cm[0,0] + cm[0,1]) if (cm[0,0] + cm[0,1]) > 0 else 0
-    abnormal_acc = cm[1,1] / (cm[1,0] + cm[1,1]) if (cm[1,0] + cm[1,1]) > 0 else 0
-    
-    logger.info(f"NORMAL Classification Accuracy: {normal_acc:.4f} ({cm[0,0]}/{cm[0,0] + cm[0,1]})")
-    logger.info(f"ABNORMAL Classification Accuracy: {abnormal_acc:.4f} ({cm[1,1]}/{cm[1,0] + cm[1,1]})")
+    healthy_acc = cm[0,0] / (cm[0,0] + cm[0,1]) if (cm[0,0] + cm[0,1]) > 0 else 0
+    unhealthy_acc = cm[1,1] / (cm[1,0] + cm[1,1]) if (cm[1,0] + cm[1,1]) > 0 else 0
+
+    logger.info(f"HEALTHY Classification Accuracy: {healthy_acc:.4f} ({cm[0,0]}/{cm[0,0] + cm[0,1]})")
+    logger.info(f"UNHEALTHY Classification Accuracy: {unhealthy_acc:.4f} ({cm[1,1]}/{cm[1,0] + cm[1,1]})")
     logger.info("=" * 70)
     
     # Print detailed classification report
-    class_report = classification_report(all_labels, all_preds, target_names=['Normal', 'Abnormal'])
+    class_report = classification_report(all_labels, all_preds, target_names=['Healthy', 'Unhealthy'])
     logger.info("Classification Report:")
     logger.info(f"\n{class_report}")
     
@@ -295,8 +295,8 @@ def test_model_on_dataset(model_path, test_data_dir, results_dir=None, threshold
     # 1. Confusion Matrix
     plt.figure(figsize=(8, 6))
     sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', 
-                xticklabels=['Normal', 'Abnormal'], 
-                yticklabels=['Normal', 'Abnormal'])
+                xticklabels=['Healthy', 'Unhealthy'], 
+                yticklabels=['Healthy', 'Unhealthy'])
     plt.xlabel('Predicted')
     plt.ylabel('True')
     plt.title('Confusion Matrix - Test Set')
@@ -400,7 +400,7 @@ def predict_images(image_paths: List[str], model_path: str, results_dir: str = N
                     'image_path': result['image_path'],
                     'predicted_class': result['predicted_class'],
                     'confidence': result['confidence'],
-                    'abnormal_probability': result['abnormal_probability'],
+                    'unhealthy_probability': result['unhealthy_probability'],
                     'threshold_used': result['threshold_used']
                 })
         
@@ -425,7 +425,7 @@ def main():
     parser.add_argument("--output", type=str, default=None,
                         help="Output directory for results")
     parser.add_argument("--threshold", type=float, default=0.5,
-                        help="Threshold for abnormal classification")
+                        help="Threshold for unhealthy classification")
     parser.add_argument("--quiet", "-q", action="store_true",
                         help="Reduce logging output (only show key results)")
     

@@ -48,9 +48,9 @@ CLASSIFICATION_THRESHOLD = 0.5
 USE_CUSTOM_THRESHOLD = True
 
 # ===== CLASS DEFINITIONS =====
-CLASSES = ['normal', 'abnormal']
+CLASSES = ['healthy', 'unhealthy']
 NUM_CLASSES = len(CLASSES)
-CLASS_NAMES = ['Normal', 'Abnormal']
+CLASS_NAMES = ['Healthy', 'Unhealthy']
 
 # ===== FILE PATHS =====
 MODEL_DIR = os.path.join(BASE_DIR, 'models')

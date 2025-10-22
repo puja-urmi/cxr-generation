@@ -40,9 +40,9 @@ class ChestXRayDataset(Dataset):
         self.image_size = image_size if image_size is not None else config.IMG_SIZE
         
         # Class to index mapping
-        self.class_to_idx = {'NORMAL': 0, 'ABNORMAL': 1}
-        self.idx_to_class = {0: 'NORMAL', 1: 'ABNORMAL'}
-        
+        self.class_to_idx = {'HEALTHY': 0, 'UNHEALTHY': 1}
+        self.idx_to_class = {0: 'HEALTHY', 1: 'UNHEALTHY'}
+
         # Load image paths and labels
         self.samples = self._load_samples()
         
@@ -53,7 +53,7 @@ class ChestXRayDataset(Dataset):
         """Load all image paths and their corresponding labels."""
         samples = []
         
-        for class_name in ['NORMAL', 'ABNORMAL']:
+        for class_name in ['HEALTHY', 'UNHEALTHY']:
             class_dir = self.data_dir / self.split / class_name
             if class_dir.exists():
                 # Load all common image formats
@@ -77,7 +77,7 @@ class ChestXRayDataset(Dataset):
     
     def _get_class_distribution(self) -> Dict[str, int]:
         """Get the distribution of classes in the dataset."""
-        distribution = {'NORMAL': 0, 'ABNORMAL': 0}
+        distribution = {'HEALTHY': 0, 'UNHEALTHY': 0}
         for _, label in self.samples:
             class_name = self.idx_to_class[label]
             distribution[class_name] += 1
