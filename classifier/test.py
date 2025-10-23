@@ -137,78 +137,78 @@ def plot_precision_recall_curve(y_true: List, y_probs: List, save_path: str = No
     plt.close()
 
 
-
 def test_model_on_dataset(model_path, test_data_dir, results_dir=None, threshold=0.5):
     """Test the trained model on the test dataset"""
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     logger.info(f"Using device: {device}")
-    
+
     # Set up results directory
     if results_dir is None:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         results_dir = f'./test_results_{timestamp}'
     os.makedirs(results_dir, exist_ok=True)
-    
+
     # Create test data loader
     logger.info("Setting up test data loader...")
-    
+
     if not os.path.exists(test_data_dir):
         logger.error(f"Test data directory not found: {test_data_dir}")
         return None
-    
+
     test_transform = transforms.Compose([
         transforms.Resize(config.IMG_SIZE),
         transforms.ToTensor(),
         transforms.Normalize(mean=config.INFERENCE_MEAN, std=config.INFERENCE_STD)
     ])
-    
+
     try:
         test_dataset = datasets.ImageFolder(root=test_data_dir, transform=test_transform)
         test_loader = torch.utils.data.DataLoader(
             test_dataset, batch_size=config.BATCH_SIZE, shuffle=False, 
             num_workers=config.NUM_WORKERS, pin_memory=config.PIN_MEMORY
         )
-        
+
         logger.info(f"Test dataset: {len(test_dataset)} images, {len(test_loader)} batches")
-        
+
         if len(test_dataset) == 0:
             logger.error("No images found in test directory!")
             return None
-            
+
     except Exception as e:
         logger.error(f"Failed to create dataset: {e}")
         return None
-    
+
     # Load model
     logger.info("Loading trained model...")
     model = XRayClassifier(backbone=config.MODEL_ARCHITECTURE, pretrained=False)
     model = model.to(device)
-    
+
     try:
         model, checkpoint = load_checkpoint(model, model_path)
         logger.info(f"Successfully loaded model from {model_path}")
     except Exception as e:
         logger.error(f"Failed to load model: {e}")
         return
-    
+
     # Set model to evaluation mode
     model.eval()
-    
+
     # Run inference
     logger.info(f"Running inference with threshold = {threshold:.2f}")
-    
+
     all_preds = []
     all_labels = []
     all_probs = []
-    
+    all_image_paths = []
+
     with torch.no_grad():
         for i, (images, labels) in enumerate(test_loader):
             if i % 10 == 0:
                 logger.info(f"Processing batch {i+1}/{len(test_loader)}")
-            
+
             images = images.to(device)
             labels = labels.cpu().numpy()
-            
+
             # Forward pass
             outputs = model(images)
             probs = torch.softmax(outputs, dim=1)
@@ -222,14 +222,39 @@ def test_model_on_dataset(model_path, test_data_dir, results_dir=None, threshold
             all_labels.extend(labels)
             all_probs.extend(unhealthy_probs)
 
+            # Get image paths for this batch
+            batch_indices = test_loader.batch_size * i + np.arange(len(labels))
+            for idx in range(len(labels)):
+                img_path = test_dataset.samples[batch_indices[idx]][0]
+                all_image_paths.append(img_path)
+
     # Convert to numpy arrays
     all_preds = np.array(all_preds)
     all_labels = np.array(all_labels)
     all_probs = np.array(all_probs)
-    
+
     if len(all_labels) == 0:
         logger.error("No test data processed!")
         return None
+
+    # Prepare CSV with image path, prediction, ground truth, and conflict
+    idx_to_class = {v: k for k, v in test_dataset.class_to_idx.items()}
+    csv_rows = []
+    for img_path, pred, label in zip(all_image_paths, all_preds, all_labels):
+        pred_class = idx_to_class[pred]
+        label_class = idx_to_class[label]
+        conflict = "conflict" if pred_class != label_class else ""
+        csv_rows.append({
+            "image_path": img_path,
+            "prediction": pred_class,
+            "ground_truth": label_class,
+            "conflict": conflict
+        })
+
+    csv_path = os.path.join(results_dir, "detailed_predictions.csv")
+    pd.DataFrame(csv_rows).to_csv(csv_path, index=False)
+    logger.info(f"Detailed predictions saved to {csv_path}")
+
     
     # Calculate metrics
     logger.info("Calculating performance metrics...")
